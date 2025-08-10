@@ -36,18 +36,6 @@ enum ProgressDirection {
     Incorrect,
 }
 
-impl ProgressDirection {
-    fn get_order_direction_from_diff(diff: i32) -> Self {
-        let order_dir = match diff {
-            i if i < 0 => ProgressDirection::Increase,
-            d if d > 0 => ProgressDirection::Decrease,
-            z if z == 0 => ProgressDirection::Incorrect,
-            _ => ProgressDirection::Incorrect,
-        };
-        order_dir
-    }
-}
-
 struct ReportAnalyzer {
     data_manager: DataManager,
 }
@@ -57,15 +45,28 @@ impl ReportAnalyzer {
         Self { data_manager }
     }
 
-    fn check_safe_progression(levels: &Vec<i32>) -> bool {
-        let expected_progression_direction = ProgressDirection::get_order_direction_from_diff(
-            levels.first().unwrap() - levels.last().unwrap(),
-        );
-        let is_safe = levels.windows(2).all(|v_pair| {
-            let diff = v_pair[0] - v_pair[1];
-            let ord_dir = ProgressDirection::get_order_direction_from_diff(diff);
+    fn check_safe_progression(levels: &[i32]) -> bool {
+        let mut expected_progression_direction: Option<ProgressDirection> = None;
 
-            ord_dir == expected_progression_direction && diff.abs() >= 1 && diff.abs() <= 3
+        let is_safe = levels.windows(2).all(|v_pair| {
+            let ord_dir = match v_pair.first().cmp(&v_pair.last()) {
+                std::cmp::Ordering::Less => ProgressDirection::Increase,
+                std::cmp::Ordering::Equal => ProgressDirection::Incorrect,
+                std::cmp::Ordering::Greater => ProgressDirection::Decrease,
+            };
+
+            match &expected_progression_direction {
+                Some(value) => {
+                    if *value != ord_dir {
+                        return false;
+                    }
+                }
+                None => expected_progression_direction = Some(ord_dir),
+            };
+
+            let diff = v_pair[0] - v_pair[1];
+
+            diff.abs() >= 1 && diff.abs() <= 3
         });
 
         is_safe
@@ -75,8 +76,30 @@ impl ReportAnalyzer {
         let mut total_safe_reports = 0;
 
         for report in &self.data_manager.reports {
-            if Self::check_safe_progression(&report) {
+            if Self::check_safe_progression(report) {
                 total_safe_reports += 1;
+            }
+        }
+
+        total_safe_reports
+    }
+
+    fn count_safe_reports_with_damping(&self) -> i32 {
+        let mut total_safe_reports = 0;
+
+        for report in &self.data_manager.reports {
+            if Self::check_safe_progression(report) {
+                total_safe_reports += 1;
+                continue;
+            } else {
+                for i in 0..report.len() {
+                    let mut damped_data = report.clone();
+                    damped_data.remove(i);
+                    if Self::check_safe_progression(&damped_data) {
+                        total_safe_reports += 1;
+                        break;
+                    }
+                }
             }
         }
 
@@ -91,6 +114,8 @@ fn main() {
     let report_analyer = ReportAnalyzer::new(data_manager);
 
     let total_safe_reports = report_analyer.count_safe_reports();
-
     println!("Total safe reports: {}", total_safe_reports);
+
+    let total_safe_reports_damped = report_analyer.count_safe_reports_with_damping();
+    println!("Total safe damped reports: {}", total_safe_reports_damped);
 }
